@@ -1,0 +1,1857 @@
+# plant<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>植物大戰殭屍 - Plants vs. Zombies Web Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Fredoka One', 'Noto Sans TC', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .pvz-border {
+      border: 3px solid #5b3e1e;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2);
+    }
+    .sun-shine {
+      animation: spin 10s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+    .card-cooldown {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.65);
+      transition: height 0.08s linear;
+      pointer-events: none;
+    }
+    /* Custom pulse for huge wave warning */
+    @keyframes redPulse {
+      0%, 100% { background-color: rgba(220, 38, 38, 0); }
+      50% { background-color: rgba(220, 38, 38, 0.35); }
+    }
+    .huge-wave-active {
+      animation: redPulse 0.8s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between overflow-x-hidden p-2 sm:p-4 select-none">
+
+  <header class="w-full max-w-5xl flex flex-wrap items-center justify-between gap-2 mb-2 px-2 py-1 bg-amber-950/80 rounded-2xl border-2 border-amber-700 shadow-xl backdrop-blur-md">
+    <!-- Left: Title, Level & Stats -->
+    <div class="flex items-center space-x-3">
+      <div class="bg-gradient-to-r from-lime-600 to-green-700 px-3 py-1 rounded-xl border border-lime-400 shadow flex items-center gap-1.5">
+        <span class="text-xl">🌻</span>
+        <span class="text-sm font-bold tracking-wide">關卡 <span id="uiLevel" class="text-yellow-300 font-extrabold text-base">1</span></span>
+      </div>
+      <div class="hidden sm:flex flex-col text-xs text-amber-200">
+        <div>分數: <span id="uiScore" class="font-bold text-white text-sm">0</span></div>
+        <div>歷史最高: <span id="uiHighScore" class="font-bold text-yellow-300">0</span></div>
+      </div>
+    </div>
+
+    <!-- Center: Wave Progress Indicator -->
+    <div class="flex-1 max-w-xs sm:max-w-md mx-2">
+      <div class="flex justify-between text-[11px] font-bold text-amber-200 mb-0.5">
+        <span id="uiWaveLabel">波次準備中...</span>
+        <span id="uiZombiesCount">殭屍: 0</span>
+      </div>
+      <div class="w-full h-3 bg-amber-950 rounded-full border border-amber-600 overflow-hidden relative p-0.5">
+        <div id="uiProgressBar" class="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 rounded-full transition-all duration-300" style="width: 0%;"></div>
+        <div class="absolute right-2 top-0 text-[9px] text-amber-100 font-bold">🏁</div>
+      </div>
+    </div>
+
+    <!-- Right: Audio, How to Play & Reset Buttons -->
+    <div class="flex items-center space-x-2">
+      <button id="btnSound" class="p-2 bg-amber-800 hover:bg-amber-700 active:scale-95 transition rounded-xl border border-amber-500 text-sm flex items-center justify-center w-9 h-9" title="切換音效">
+        <span id="soundIcon">🔊</span>
+      </button>
+      <button id="btnHelp" class="px-2.5 py-1 bg-sky-700 hover:bg-sky-600 active:scale-95 transition rounded-xl border border-sky-400 text-xs font-bold shadow flex items-center gap-1">
+        <span>📖</span> 指引
+      </button>
+      <button id="btnResetData" class="px-2 py-1 bg-rose-800 hover:bg-rose-700 active:scale-95 transition rounded-xl border border-rose-500 text-[11px] font-bold text-rose-200" title="清除本機歷史紀錄">
+        重設
+      </button>
+    </div>
+  </header>
+
+  <div class="w-full max-w-5xl flex items-center justify-between gap-2 mb-2 p-1.5 bg-gradient-to-b from-amber-900 to-amber-950 rounded-2xl border-4 border-amber-800 shadow-2xl">
+    <!-- Sun Counter -->
+    <div class="flex items-center gap-2 bg-gradient-to-br from-amber-200 to-yellow-500 text-amber-950 px-3 py-1.5 rounded-xl border-2 border-yellow-300 shadow-inner min-w-[95px] justify-center">
+      <div class="w-7 h-7 relative flex items-center justify-center text-xl sun-shine">☀️</div>
+      <div class="text-xl font-black" id="uiSun">150</div>
+    </div>
+
+    <!-- Seed Cards Tray -->
+    <div class="flex-1 flex items-center gap-2 overflow-x-auto py-1 px-1 justify-start sm:justify-center scrollbar-none" id="seedTray">
+      <!-- Card: Sunflower (1) -->
+      <div class="seed-card relative w-16 h-20 bg-amber-100 text-amber-950 rounded-xl border-2 border-amber-600 shadow cursor-pointer flex flex-col items-center justify-between p-1 hover:brightness-110 active:scale-95 transition shrink-0" data-plant="sunflower" data-cost="50" data-cooldown="6">
+        <div class="card-cooldown rounded-t-[10px]" style="height: 0%;"></div>
+        <div class="text-2xl mt-0.5 pointer-events-none">🌻</div>
+        <div class="text-[10px] font-bold pointer-events-none leading-none">太陽花</div>
+        <div class="text-[11px] font-black text-amber-800 bg-amber-300/80 px-1.5 rounded-md pointer-events-none">50</div>
+        <span class="absolute top-0.5 left-1 text-[9px] text-stone-500 font-mono">1</span>
+      </div>
+
+      <!-- Card: Peashooter (2) -->
+      <div class="seed-card relative w-16 h-20 bg-emerald-100 text-emerald-950 rounded-xl border-2 border-emerald-600 shadow cursor-pointer flex flex-col items-center justify-between p-1 hover:brightness-110 active:scale-95 transition shrink-0" data-plant="peashooter" data-cost="100" data-cooldown="7">
+        <div class="card-cooldown rounded-t-[10px]" style="height: 0%;"></div>
+        <div class="text-2xl mt-0.5 pointer-events-none">🌱</div>
+        <div class="text-[10px] font-bold pointer-events-none leading-none">豌豆射手</div>
+        <div class="text-[11px] font-black text-emerald-800 bg-emerald-300/80 px-1.5 rounded-md pointer-events-none">100</div>
+        <span class="absolute top-0.5 left-1 text-[9px] text-stone-500 font-mono">2</span>
+      </div>
+
+      <!-- Card: Wallnut (3) -->
+      <div class="seed-card relative w-16 h-20 bg-yellow-100 text-yellow-950 rounded-xl border-2 border-yellow-700 shadow cursor-pointer flex flex-col items-center justify-between p-1 hover:brightness-110 active:scale-95 transition shrink-0" data-plant="wallnut" data-cost="50" data-cooldown="16">
+        <div class="card-cooldown rounded-t-[10px]" style="height: 0%;"></div>
+        <div class="text-2xl mt-0.5 pointer-events-none">🥔</div>
+        <div class="text-[10px] font-bold pointer-events-none leading-none">堅果牆</div>
+        <div class="text-[11px] font-black text-yellow-800 bg-yellow-300/80 px-1.5 rounded-md pointer-events-none">50</div>
+        <span class="absolute top-0.5 left-1 text-[9px] text-stone-500 font-mono">3</span>
+      </div>
+
+      <!-- Card: Cherry Bomb (4) -->
+      <div class="seed-card relative w-16 h-20 bg-rose-100 text-rose-950 rounded-xl border-2 border-rose-600 shadow cursor-pointer flex flex-col items-center justify-between p-1 hover:brightness-110 active:scale-95 transition shrink-0" data-plant="cherrybomb" data-cost="150" data-cooldown="22">
+        <div class="card-cooldown rounded-t-[10px]" style="height: 0%;"></div>
+        <div class="text-2xl mt-0.5 pointer-events-none">🍒</div>
+        <div class="text-[10px] font-bold pointer-events-none leading-none">櫻桃炸彈</div>
+        <div class="text-[11px] font-black text-rose-800 bg-rose-300/80 px-1.5 rounded-md pointer-events-none">150</div>
+        <span class="absolute top-0.5 left-1 text-[9px] text-stone-500 font-mono">4</span>
+      </div>
+    </div>
+
+    <!-- Shovel Tool -->
+    <div id="shovelTool" class="relative w-14 h-20 bg-slate-800 text-stone-200 rounded-xl border-2 border-slate-600 shadow cursor-pointer flex flex-col items-center justify-center gap-1 hover:bg-slate-700 active:scale-95 transition shrink-0" title="剷除植物 (快捷鍵: S)">
+      <div class="text-2xl pointer-events-none">🪴</div>
+      <div class="text-[10px] font-bold pointer-events-none">鏟子</div>
+      <span class="absolute top-0.5 left-1 text-[9px] text-stone-400 font-mono">S</span>
+    </div>
+  </div>
+
+  <main class="w-full max-w-5xl flex-1 flex flex-col items-center justify-center relative">
+    <div id="canvasWrapper" class="relative w-full aspect-[9/5] max-h-[72vh] rounded-2xl overflow-hidden shadow-2xl border-4 border-amber-950 bg-stone-900">
+      <canvas id="gameCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+
+      <!-- Huge Wave Banner Alert Overlay -->
+      <div id="hugeWaveAlert" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center opacity-0 transition-opacity duration-300 z-20">
+        <div class="bg-red-950/90 text-red-100 border-4 border-red-500 px-6 py-4 rounded-3xl shadow-2xl text-center transform scale-90 transition-transform">
+          <div class="text-3xl sm:text-5xl font-black text-yellow-300 tracking-wider animate-bounce">⚠️ 殭屍大波來襲！ ⚠️</div>
+          <div class="text-sm sm:text-lg text-red-200 font-bold mt-1">A HUGE WAVE OF ZOMBIES IS APPROACHING!</div>
+        </div>
+      </div>
+
+      <!-- In-canvas Toast/Notification -->
+      <div id="uiMessage" class="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none bg-stone-900/90 border border-amber-400 text-amber-200 px-4 py-1.5 rounded-full text-xs font-bold opacity-0 transition-opacity duration-200 shadow-lg z-30">
+        提示訊息
+      </div>
+    </div>
+  </main>
+
+  <!-- Help Modal -->
+  <div id="helpModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-gradient-to-b from-stone-800 to-stone-900 border-4 border-amber-600 rounded-3xl p-6 max-w-md w-full shadow-2xl text-stone-200">
+      <div class="flex justify-between items-center mb-4 border-b border-stone-700 pb-2">
+        <h2 class="text-xl font-bold text-yellow-400 flex items-center gap-2"><span>🌻</span> 遊戲作戰指引</h2>
+        <button id="btnCloseHelp" class="text-stone-400 hover:text-white text-xl font-bold">✕</button>
+      </div>
+      <div class="space-y-3 text-xs sm:text-sm">
+        <div class="flex items-start gap-2.5">
+          <span class="text-lg">☀️</span>
+          <div><strong class="text-amber-300">收集陽光：</strong> 天空會定時自然降落陽光，向日葵也會主動生產。點擊或鼠標掠過陽光即可收集 (+25)。</div>
+        </div>
+        <div class="flex items-start gap-2.5">
+          <span class="text-lg">🌱</span>
+          <div><strong class="text-lime-300">種植防線：</strong> 點擊頂部植物卡（或按鍵盤 1~4），再點選草地格子種植。若陽光不足或冷卻中則無法放置。</div>
+        </div>
+        <div class="flex items-start gap-2.5">
+          <span class="text-lg">🪴</span>
+          <div><strong class="text-orange-300">鏟子工具：</strong> 點擊鏟子（或按 S），再點擊已種植的植物可將其移除以重新佈局。再次點擊鏟子或右鍵取消。</div>
+        </div>
+        <div class="flex items-start gap-2.5">
+          <span class="text-lg">🚜</span>
+          <div><strong class="text-cyan-300">除草機防線：</strong> 每行草地底端配備一台除草機。當殭屍突破時會啟動並清空該行！若無除草機時殭屍再度侵入，殭屍將吃掉你的腦子！</div>
+        </div>
+      </div>
+      <button id="btnConfirmHelp" class="mt-6 w-full py-2.5 bg-gradient-to-r from-lime-600 to-green-700 hover:from-lime-500 hover:to-green-600 rounded-xl font-bold text-white shadow-lg active:scale-95 transition">
+        開始防守草坪！
+      </button>
+    </div>
+  </div>
+
+  <!-- Game Over Modal -->
+  <div id="gameOverModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-gradient-to-b from-red-950 to-stone-950 border-4 border-red-600 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
+      <div class="text-5xl mb-2">🧟‍♂️🧠</div>
+      <h2 class="text-2xl font-black text-red-500 tracking-wider mb-2">THE ZOMBIES ATE YOUR BRAINS!</h2>
+      <p class="text-stone-300 text-xs mb-4">殭屍突破了你的防線並吃掉了你的腦子！</p>
+      <div class="bg-stone-900/80 rounded-xl p-3 border border-stone-800 text-xs text-stone-300 mb-5 space-y-1">
+        <div>本次得分: <span id="overScore" class="font-bold text-yellow-400">0</span></div>
+        <div>擊殺殭屍: <span id="overKills" class="font-bold text-lime-400">0</span></div>
+      </div>
+      <button id="btnRestart" class="w-full py-3 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 rounded-xl font-black text-amber-950 shadow-lg active:scale-95 transition">
+        🔄 重新挑戰
+      </button>
+    </div>
+  </div>
+
+  <!-- Victory Modal -->
+  <div id="victoryModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-gradient-to-b from-emerald-950 to-stone-950 border-4 border-yellow-500 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
+      <div class="text-5xl mb-2">🏆🌻</div>
+      <h2 class="text-2xl font-black text-yellow-400 tracking-wider mb-2">VICTORY!</h2>
+      <p class="text-stone-200 text-xs mb-4">草坪守護成功！所有殭屍已被全數消滅！</p>
+      <div class="bg-stone-900/80 rounded-xl p-3 border border-stone-800 text-xs text-stone-300 mb-5 space-y-1">
+        <div>通關獎勵: <span class="font-bold text-yellow-400">+500 分</span></div>
+        <div>歷史最高紀錄: <span id="vicHighScore" class="font-bold text-yellow-300">0</span></div>
+      </div>
+      <button id="btnNextLevel" class="w-full py-3 bg-gradient-to-r from-lime-500 to-green-600 hover:from-lime-400 hover:to-green-500 rounded-xl font-black text-stone-950 shadow-lg active:scale-95 transition">
+        ➡️ 進入下一關
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Web Audio API Synthesizer
+     * Generates rich SFX without any external media files
+     */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playShoot() {
+        if (!this.enabled) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(140, this.ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.13);
+      }
+      playHit() {
+        if (!this.enabled) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.09);
+      }
+      playSun() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, now + idx * 0.05);
+          gain.gain.linearRampToValueAtTime(0.18, now + idx * 0.05 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.18);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.05);
+          osc.stop(now + idx * 0.05 + 0.2);
+        });
+      }
+      playPlant() {
+        if (!this.enabled) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(420, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.13);
+      }
+      playChomp() {
+        if (!this.enabled) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.13);
+      }
+      playExplosion() {
+        if (!this.enabled) return;
+        this.init();
+        const dur = 0.6;
+        const bufferSize = this.ctx.sampleRate * dur;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + dur);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+      }
+      playMower() {
+        if (!this.enabled) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(80, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(260, this.ctx.currentTime + 0.8);
+        gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.8);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.85);
+      }
+      playVictory() {
+        if (!this.enabled) return;
+        this.init();
+        const chords = [523.25, 659.25, 783.99, 1046.50];
+        chords.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.1 + 0.7);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + idx * 0.1);
+          osc.stop(this.ctx.currentTime + idx * 0.1 + 0.8);
+        });
+      }
+      playGameOver() {
+        if (!this.enabled) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 1.2);
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 1.2);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 1.25);
+      }
+    }
+  </script>
+
+  <script>
+    const ROWS = 5;
+    const COLS = 9;
+    const CANVAS_WIDTH = 900;
+    const CANVAS_HEIGHT = 500;
+    const CELL_W = CANVAS_WIDTH / COLS;  // 100
+    const CELL_H = CANVAS_HEIGHT / ROWS; // 100
+
+    // LocalStorage Key
+    const STORAGE_KEY = 'PVZ_WEB_RECORD_DATA_V1';
+
+    // Default Storage Structure
+    let gameStorage = {
+      highScore: 0,
+      unlockedLevel: 1,
+      zombiesKilledTotal: 0,
+      soundEnabled: true
+    };
+
+    function loadStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          gameStorage = Object.assign(gameStorage, JSON.parse(raw));
+        }
+      } catch (e) {
+        console.warn('LocalStorage not accessible:', e);
+      }
+    }
+
+    function saveStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(gameStorage));
+      } catch (e) {
+        console.warn('Cannot write to LocalStorage:', e);
+      }
+    }
+
+    // Audio Instance
+    const sound = new SoundEngine();
+
+    // Game Core State
+    let currentSun = 150;
+    let currentScore = 0;
+    let currentLevel = 1;
+    let selectedPlantType = null; // 'sunflower', 'peashooter', 'wallnut', 'cherrybomb', or 'shovel'
+    let isGameOver = false;
+    let isVictory = false;
+    let isHugeWaveAlarm = false;
+
+    // Cooldown trackers (timestamps)
+    const cooldowns = {
+      sunflower: { max: 6, readyAt: 0 },
+      peashooter: { max: 7, readyAt: 0 },
+      wallnut: { max: 16, readyAt: 0 },
+      cherrybomb: { max: 22, readyAt: 0 }
+    };
+
+    const plantCosts = {
+      sunflower: 50,
+      peashooter: 100,
+      wallnut: 50,
+      cherrybomb: 150
+    };
+
+    // Entities collections
+    let grid = []; // 5 x 9 (stores Plant or null)
+    let zombies = [];
+    let projectiles = [];
+    let suns = [];
+    let particles = [];
+    let floatingTexts = [];
+    let lawnmowers = [];
+
+    // Wave Progression Control
+    let waveTotalZombies = 12;
+    let zombiesSpawned = 0;
+    let zombiesKilledInLevel = 0;
+    let spawnTimer = 0;
+    let nextSpawnInterval = 4.5;
+    let naturalSunTimer = 0;
+  </script>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+
+    let hoverCell = { col: -1, row: -1 };
+
+    // Draw Grass Board with alternating tiles
+    function drawLawn() {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const isEven = (r + c) % 2 === 0;
+          ctx.fillStyle = isEven ? '#4da22d' : '#459527';
+          ctx.fillRect(c * CELL_W, r * CELL_H, CELL_W, CELL_H);
+
+          // Subtle grass blade details
+          ctx.strokeStyle = isEven ? '#5cb539' : '#3d8622';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(c * CELL_W + 15, r * CELL_H + 30);
+          ctx.lineTo(c * CELL_W + 20, r * CELL_H + 20);
+          ctx.moveTo(c * CELL_W + 65, r * CELL_H + 75);
+          ctx.lineTo(c * CELL_W + 70, r * CELL_H + 65);
+          ctx.stroke();
+
+          // Cell separator line
+          ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(c * CELL_W, r * CELL_H, CELL_W, CELL_H);
+        }
+      }
+
+      // Draw hover indicator
+      if (hoverCell.col >= 0 && hoverCell.col < COLS && hoverCell.row >= 0 && hoverCell.row < ROWS) {
+        const canPlant = selectedPlantType && selectedPlantType !== 'shovel' && !grid[hoverCell.row][hoverCell.col] && currentSun >= (plantCosts[selectedPlantType] || 0);
+        const canShovel = selectedPlantType === 'shovel' && grid[hoverCell.row][hoverCell.col];
+
+        if (selectedPlantType) {
+          ctx.fillStyle = (canPlant || canShovel) ? 'rgba(52, 211, 153, 0.35)' : 'rgba(239, 68, 68, 0.35)';
+          ctx.strokeStyle = (canPlant || canShovel) ? '#10b981' : '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.fillRect(hoverCell.col * CELL_W, hoverCell.row * CELL_H, CELL_W, CELL_H);
+          ctx.strokeRect(hoverCell.col * CELL_W + 1.5, hoverCell.row * CELL_H + 1.5, CELL_W - 3, CELL_H - 3);
+        }
+      }
+    }
+
+    // Lawnmower Model
+    class Lawnmower {
+      constructor(row) {
+        this.row = row;
+        this.x = 8;
+        this.y = row * CELL_H + 30;
+        this.active = false;
+        this.speed = 460;
+        this.used = false;
+      }
+      update(dt) {
+        if (this.active) {
+          this.x += this.speed * dt;
+          // Check collision with zombies in same row
+          for (let z of zombies) {
+            if (z.row === this.row && Math.abs(z.x - this.x) < 45) {
+              z.takeDamage(9999);
+              createGore(z.x + 30, z.y + 40, '#a3e635');
+            }
+          }
+          if (this.x > CANVAS_WIDTH + 60) {
+            this.used = true;
+          }
+        }
+      }
+      draw() {
+        if (this.used) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        // Red Engine Hood
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, 48, 30, [6, 12, 4, 4]);
+        ctx.fill();
+        ctx.strokeStyle = '#991b1b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Engine Chrome block
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(8, 6, 18, 16);
+        // Handle bar
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(2, 6);
+        ctx.lineTo(-12, -10);
+        ctx.stroke();
+
+        // Wheels
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(10, 30, 8, 0, Math.PI * 2);
+        ctx.arc(38, 30, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#cbd5e1';
+        ctx.beginPath();
+        ctx.arc(10, 30, 3, 0, Math.PI * 2);
+        ctx.arc(38, 30, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Plant Class Hierarchy
+    class Plant {
+      constructor(type, col, row) {
+        this.type = type;
+        this.col = col;
+        this.row = row;
+        this.x = col * CELL_W + CELL_W / 2;
+        this.y = row * CELL_H + CELL_H / 2;
+        this.timer = 0;
+        this.animTimer = Math.random() * 10;
+        this.flash = 0;
+
+        switch (type) {
+          case 'sunflower':
+            this.hp = 300;
+            this.maxHp = 300;
+            this.productionInterval = 10;
+            break;
+          case 'peashooter':
+            this.hp = 300;
+            this.maxHp = 300;
+            this.shootInterval = 1.6;
+            break;
+          case 'wallnut':
+            this.hp = 2000;
+            this.maxHp = 2000;
+            break;
+          case 'cherrybomb':
+            this.hp = 300;
+            this.maxHp = 300;
+            this.fuseTimer = 1.2;
+            break;
+        }
+      }
+
+      update(dt) {
+        this.animTimer += dt;
+        if (this.flash > 0) this.flash -= dt;
+
+        if (this.type === 'sunflower') {
+          this.timer += dt;
+          if (this.timer >= this.productionInterval) {
+            this.timer = 0;
+            spawnSun(this.x + (Math.random() * 30 - 15), this.y - 15, false);
+          }
+        } else if (this.type === 'peashooter') {
+          this.timer += dt;
+          if (this.timer >= this.shootInterval) {
+            // Only shoot if zombie is ahead in the same row
+            const hasZombieAhead = zombies.some(z => z.row === this.row && z.x > this.x && z.hp > 0);
+            if (hasZombieAhead) {
+              this.timer = 0;
+              projectiles.push(new PeaProjectile(this.x + 24, this.y - 10, this.row));
+              sound.playShoot();
+            }
+          }
+        } else if (this.type === 'cherrybomb') {
+          this.fuseTimer -= dt;
+          if (this.fuseTimer <= 0) {
+            this.explode();
+          }
+        }
+      }
+
+      explode() {
+        sound.playExplosion();
+        // 3x3 Blast effect
+        const minRow = Math.max(0, this.row - 1);
+        const maxRow = Math.min(ROWS - 1, this.row + 1);
+        const minCol = Math.max(0, this.col - 1);
+        const maxCol = Math.min(COLS - 1, this.col + 1);
+
+        const blastLeft = minCol * CELL_W;
+        const blastRight = (maxCol + 1) * CELL_W;
+
+        for (let z of zombies) {
+          if (z.row >= minRow && z.row <= maxRow && z.x + 35 >= blastLeft && z.x <= blastRight) {
+            z.takeDamage(1800);
+            createGore(z.x + 35, z.y + 45, '#ef4444');
+          }
+        }
+
+        // Particle blast
+        createBlastParticles(this.x, this.y);
+        // Remove plant from grid
+        grid[this.row][this.col] = null;
+      }
+
+      takeDamage(amount) {
+        this.hp -= amount;
+        this.flash = 0.12;
+        sound.playChomp();
+        return this.hp <= 0;
+      }
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Flash white when being bitten
+        if (this.flash > 0) {
+          ctx.filter = 'brightness(1.8)';
+        }
+
+        const sway = Math.sin(this.animTimer * 4) * 4;
+
+        if (this.type === 'sunflower') {
+          this.drawSunflower(sway);
+        } else if (this.type === 'peashooter') {
+          this.drawPeashooter(sway);
+        } else if (this.type === 'wallnut') {
+          this.drawWallnut(sway);
+        } else if (this.type === 'cherrybomb') {
+          this.drawCherrybomb();
+        }
+        ctx.restore();
+      }
+
+      drawSunflower(sway) {
+        // Stem & leaves
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, 30);
+        ctx.quadraticCurveTo(sway * 0.5, 10, 0, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = '#16a34a';
+        ctx.beginPath();
+        ctx.ellipse(-14, 20, 12, 6, -0.4, 0, Math.PI * 2);
+        ctx.ellipse(14, 20, 12, 6, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Petals (Rotating lightly)
+        ctx.save();
+        ctx.translate(0, sway * 0.4);
+        ctx.fillStyle = '#eab308';
+        const numPetals = 8;
+        for (let i = 0; i < numPetals; i++) {
+          const angle = (i * (Math.PI * 2)) / numPetals + this.animTimer * 0.5;
+          const px = Math.cos(angle) * 22;
+          const py = Math.sin(angle) * 22;
+          ctx.beginPath();
+          ctx.arc(px, py, 11, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Face
+        ctx.fillStyle = '#854d0e';
+        ctx.beginPath();
+        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyes & smile
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(-6, -3, 3, 0, Math.PI * 2);
+        ctx.arc(6, -3, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#3f2205';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 3, 7, 0, Math.PI);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawPeashooter(sway) {
+        // Stem
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, 30);
+        ctx.quadraticCurveTo(sway * 0.6, 12, 0, 0);
+        ctx.stroke();
+
+        // Back leaf
+        ctx.fillStyle = '#15803d';
+        ctx.beginPath();
+        ctx.ellipse(-14, 18, 12, 6, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(sway * 0.6, 0);
+
+        // Head
+        ctx.fillStyle = '#4ade80';
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#16a34a';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Snout (Mouth barrel)
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.ellipse(18, 0, 10, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Snout opening hole
+        ctx.fillStyle = '#052e16';
+        ctx.beginPath();
+        ctx.ellipse(22, 0, 5, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(4, -6, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(5, -7, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      drawWallnut(sway) {
+        const hpPercent = this.hp / this.maxHp;
+        // Body (Tall potato shape)
+        ctx.save();
+        ctx.translate(sway * 0.2, 0);
+        ctx.fillStyle = '#a16207';
+        ctx.beginPath();
+        ctx.ellipse(0, 5, 23, 30, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#713f12';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Eyes based on health
+        if (hpPercent > 0.6) {
+          // Healthy big eyes
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.ellipse(-7, -4, 6, 9, 0, 0, Math.PI * 2);
+          ctx.ellipse(7, -4, 6, 9, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          ctx.arc(-5, -4, 3, 0, Math.PI * 2);
+          ctx.arc(8, -4, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Smile
+          ctx.strokeStyle = '#451a03';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 10, 6, 0, Math.PI);
+          ctx.stroke();
+        } else if (hpPercent > 0.3) {
+          // Cracked / Worried
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(-7, -2, 5, 0, Math.PI * 2);
+          ctx.arc(7, -2, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          ctx.arc(-7, -1, 3, 0, Math.PI * 2);
+          ctx.arc(7, -1, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Cracks
+          ctx.strokeStyle = '#451a03';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(-15, -15);
+          ctx.lineTo(-6, -5);
+          ctx.lineTo(-10, 10);
+          ctx.stroke();
+        } else {
+          // Heavy injured / crying
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(-7, 5, 4, 0, Math.PI * 2);
+          ctx.arc(7, 5, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = '#451a03';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(-10, -3);
+          ctx.lineTo(-3, -1);
+          ctx.moveTo(10, -3);
+          ctx.lineTo(3, -1);
+          ctx.stroke();
+
+          // Lots of cracks
+          ctx.beginPath();
+          ctx.moveTo(-15, -10);
+          ctx.lineTo(-3, 0);
+          ctx.lineTo(-8, 18);
+          ctx.moveTo(14, -14);
+          ctx.lineTo(5, -2);
+          ctx.lineTo(12, 12);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      drawCherrybomb() {
+        const pulse = 1 + Math.sin(this.fuseTimer * 25) * 0.15;
+        ctx.save();
+        ctx.scale(pulse, pulse);
+
+        // Stems tied together
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, -25);
+        ctx.quadraticCurveTo(-8, -10, -14, 0);
+        ctx.moveTo(0, -25);
+        ctx.quadraticCurveTo(8, -10, 14, 0);
+        ctx.stroke();
+
+        // Stem joint
+        ctx.fillStyle = '#16a34a';
+        ctx.beginPath();
+        ctx.arc(0, -25, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Twin cherries (Red glowing)
+        ctx.fillStyle = '#e11d48';
+        ctx.shadowColor = '#f43f5e';
+        ctx.shadowBlur = 15;
+
+        // Left cherry
+        ctx.beginPath();
+        ctx.arc(-14, 6, 17, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Right cherry
+        ctx.beginPath();
+        ctx.arc(14, 6, 17, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Angry Eyes
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-16, 4, 4, 0, Math.PI * 2);
+        ctx.arc(12, 4, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(-15, 4, 2, 0, Math.PI * 2);
+        ctx.arc(13, 4, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Angled eyebrows
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-20, -1);
+        ctx.lineTo(-12, 2);
+        ctx.moveTo(8, 2);
+        ctx.lineTo(16, -1);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+  </script>
+
+  <script>
+    class PeaProjectile {
+      constructor(x, y, row) {
+        this.x = x;
+        this.y = y;
+        this.row = row;
+        this.speed = 360;
+        this.damage = 20;
+        this.radius = 7;
+        this.dead = false;
+      }
+      update(dt) {
+        this.x += this.speed * dt;
+        // Collision with zombies in same row
+        for (let z of zombies) {
+          if (z.row === this.row && z.hp > 0 && Math.abs(z.x + 35 - this.x) < 26) {
+            z.takeDamage(this.damage);
+            sound.playHit();
+            createGore(this.x, this.y, '#84cc16');
+            this.dead = true;
+            break;
+          }
+        }
+        if (this.x > CANVAS_WIDTH + 20) {
+          this.dead = true;
+        }
+      }
+      draw() {
+        ctx.save();
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Specular highlight
+        ctx.fillStyle = '#86efac';
+        ctx.beginPath();
+        ctx.arc(this.x - 2, this.y - 2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    class Zombie {
+      constructor(type, row) {
+        this.type = type; // 'basic' or 'conehead'
+        this.row = row;
+        this.x = CANVAS_WIDTH + Math.random() * 60;
+        this.y = row * CELL_H + 10;
+        this.animTimer = Math.random() * 5;
+        this.eating = false;
+        this.flash = 0;
+
+        if (type === 'basic') {
+          this.hp = 200;
+          this.maxHp = 200;
+          this.speed = 18;
+          this.scoreReward = 50;
+        } else if (type === 'conehead') {
+          this.hp = 560; // 360 Cone + 200 Body
+          this.maxHp = 560;
+          this.speed = 18;
+          this.scoreReward = 100;
+        }
+      }
+
+      update(dt) {
+        this.animTimer += dt;
+        if (this.flash > 0) this.flash -= dt;
+
+        // Check if there is a plant in front to chew
+        const col = Math.floor((this.x + 20) / CELL_W);
+        let plantToEat = null;
+
+        if (col >= 0 && col < COLS) {
+          const plant = grid[this.row][col];
+          if (plant && (this.x + 25 >= plant.x - 15) && (this.x <= plant.x + 25)) {
+            plantToEat = plant;
+          }
+        }
+
+        if (plantToEat) {
+          this.eating = true;
+          const isDead = plantToEat.takeDamage(40 * dt);
+          if (isDead) {
+            grid[this.row][col] = null;
+            this.eating = false;
+          }
+        } else {
+          this.eating = false;
+          this.x -= this.speed * dt;
+        }
+
+        // Trigger lawnmower or defeat
+        if (this.x < 30) {
+          const mower = lawnmowers[this.row];
+          if (mower && !mower.used) {
+            if (!mower.active) {
+              mower.active = true;
+              sound.playMower();
+            }
+          } else if (this.x < -10) {
+            triggerGameOver();
+          }
+        }
+      }
+
+      takeDamage(amount) {
+        this.hp -= amount;
+        this.flash = 0.12;
+        if (this.hp <= 0) {
+          currentScore += this.scoreReward;
+          zombiesKilledInLevel++;
+          gameStorage.zombiesKilledTotal++;
+          updateDashboard();
+          createFloatingText(`+${this.scoreReward}`, this.x + 30, this.y, '#facc15');
+        }
+      }
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        if (this.flash > 0) {
+          ctx.filter = 'brightness(1.9)';
+        }
+
+        const limp = Math.sin(this.animTimer * 5) * 4;
+        const armWave = Math.sin(this.animTimer * 4) * 8;
+
+        // Shadow under zombie
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(32, 75, 20, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Legs
+        ctx.strokeStyle = '#1e3a8a'; // Blue pants
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(26, 52);
+        ctx.lineTo(24 - limp, 74);
+        ctx.moveTo(38, 52);
+        ctx.lineTo(40 + limp, 74);
+        ctx.stroke();
+
+        // Torso / Brown coat
+        ctx.fillStyle = '#78350f';
+        ctx.beginPath();
+        ctx.roundRect(22, 28, 22, 26, [3, 3, 0, 0]);
+        ctx.fill();
+
+        // Tie
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.moveTo(32, 29);
+        ctx.lineTo(35, 42);
+        ctx.lineTo(31, 45);
+        ctx.lineTo(29, 29);
+        ctx.fill();
+
+        // Zombie Head
+        ctx.fillStyle = '#84cc16'; // Pale green flesh
+        ctx.beginPath();
+        ctx.arc(32, 18, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#4d7c0f';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Cone Head Accessory (if conehead type and HP > 200)
+        if (this.type === 'conehead' && this.hp > 200) {
+          ctx.save();
+          ctx.fillStyle = '#f97316';
+          ctx.strokeStyle = '#c2410c';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(18, 16);
+          ctx.lineTo(46, 16);
+          ctx.lineTo(33, -16);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Cone white stripes
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(25, 4);
+          ctx.lineTo(39, 4);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Zombie Face (Big goofy eyes)
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(26, 15, 4, 0, Math.PI * 2);
+        ctx.arc(36, 17, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(25, 15, 1.8, 0, Math.PI * 2);
+        ctx.arc(35, 17, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mouth (open if chewing)
+        if (this.eating) {
+          ctx.fillStyle = '#450a0a';
+          ctx.beginPath();
+          ctx.arc(29, 24, 4, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = '#3f6212';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(24, 24);
+          ctx.lineTo(35, 23);
+          ctx.stroke();
+        }
+
+        // Outstretched Arms
+        ctx.strokeStyle = '#84cc16';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(22, 34);
+        ctx.lineTo(4, 30 + armWave);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+  </script>
+
+  <script>
+    class Sun {
+      constructor(x, y, isNatural = false) {
+        this.x = x;
+        this.y = y;
+        this.targetY = isNatural ? 80 + Math.random() * (CANVAS_HEIGHT - 160) : y + 25;
+        this.isNatural = isNatural;
+        this.radius = 24;
+        this.collected = false;
+        this.timer = 0;
+        this.lifeTime = 12; // Auto despawn if neglected
+      }
+
+      update(dt) {
+        this.timer += dt;
+        if (this.y < this.targetY) {
+          this.y += (this.isNatural ? 45 : 30) * dt;
+        }
+      }
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Rotating rays
+        ctx.rotate(this.timer * 1.5);
+        ctx.fillStyle = '#fde047';
+        for (let i = 0; i < 8; i++) {
+          ctx.rotate(Math.PI / 4);
+          ctx.beginPath();
+          ctx.roundRect(-4, -this.radius - 5, 8, 10, 3);
+          ctx.fill();
+        }
+
+        // Sun orb
+        ctx.fillStyle = '#eab308';
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Inner glowing core
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    function spawnSun(x, y, isNatural = false) {
+      suns.push(new Sun(x, y, isNatural));
+    }
+
+    // Particle fx for Pea hits and Cherry Bomb blasts
+    function createGore(x, y, color) {
+      for (let i = 0; i < 6; i++) {
+        particles.push({
+          x: x,
+          y: y,
+          vx: (Math.random() - 0.5) * 160,
+          vy: (Math.random() - 0.7) * 160,
+          color: color,
+          radius: 2 + Math.random() * 3,
+          life: 0.35
+        });
+      }
+    }
+
+    function createBlastParticles(x, y) {
+      for (let i = 0; i < 50; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 60 + Math.random() * 260;
+        particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: ['#f97316', '#ef4444', '#facc15', '#451a03'][Math.floor(Math.random() * 4)],
+          radius: 4 + Math.random() * 7,
+          life: 0.6 + Math.random() * 0.4
+        });
+      }
+    }
+
+    function createFloatingText(text, x, y, color = '#fef08a') {
+      floatingTexts.push({
+        text,
+        x,
+        y,
+        color,
+        life: 0.9,
+        vy: -35
+      });
+    }
+  </script>
+
+  <script>
+    let lastTimestamp = 0;
+
+    function resetLevelState(level = 1) {
+      currentLevel = level;
+      currentSun = 150;
+      isGameOver = false;
+      isVictory = false;
+      isHugeWaveAlarm = false;
+      zombiesKilledInLevel = 0;
+      zombiesSpawned = 0;
+      waveTotalZombies = 10 + level * 5;
+      spawnTimer = 0;
+      nextSpawnInterval = 3.5;
+      naturalSunTimer = 0;
+
+      // Reset Cooldowns
+      for (let key in cooldowns) {
+        cooldowns[key].readyAt = 0;
+      }
+
+      // Initialize Grid
+      grid = [];
+      for (let r = 0; r < ROWS; r++) {
+        grid[r] = [];
+        for (let c = 0; c < COLS; c++) {
+          grid[r][c] = null;
+        }
+      }
+
+      // Initialize Lawnmowers
+      lawnmowers = [];
+      for (let r = 0; r < ROWS; r++) {
+        lawnmowers.push(new Lawnmower(r));
+      }
+
+      zombies = [];
+      projectiles = [];
+      suns = [];
+      particles = [];
+      floatingTexts = [];
+      selectedPlantType = null;
+
+      // Update modals & UI
+      document.getElementById('gameOverModal').classList.add('hidden');
+      document.getElementById('victoryModal').classList.add('hidden');
+      document.getElementById('hugeWaveAlert').classList.add('opacity-0');
+      document.getElementById('canvasWrapper').classList.remove('huge-wave-active');
+
+      updateDashboard();
+      updateSeedCards();
+      showMessage(`第 ${level} 關開始！準備迎戰殭屍！`);
+    }
+
+    function spawnNextZombie() {
+      if (zombiesSpawned >= waveTotalZombies) return;
+
+      const row = Math.floor(Math.random() * ROWS);
+      // Determine zombie type: conehead probability increases with level
+      const coneProb = Math.min(0.65, 0.2 + currentLevel * 0.1);
+      const type = Math.random() < coneProb ? 'conehead' : 'basic';
+
+      zombies.push(new Zombie(type, row));
+      zombiesSpawned++;
+
+      // Trigger Huge Wave alarm near the end
+      if (zombiesSpawned === Math.floor(waveTotalZombies * 0.75) && !isHugeWaveAlarm) {
+        triggerHugeWaveAlarm();
+      }
+
+      // Decreasing interval as wave progresses
+      nextSpawnInterval = Math.max(1.8, 5 - (zombiesSpawned / waveTotalZombies) * 3);
+    }
+
+    function triggerHugeWaveAlarm() {
+      isHugeWaveAlarm = true;
+      const alertBox = document.getElementById('hugeWaveAlert');
+      const wrapper = document.getElementById('canvasWrapper');
+      alertBox.classList.remove('opacity-0');
+      wrapper.classList.add('huge-wave-active');
+
+      setTimeout(() => {
+        alertBox.classList.add('opacity-0');
+        wrapper.classList.remove('huge-wave-active');
+      }, 3200);
+
+      // Spawn a sudden horde of 3 zombies
+      for (let i = 0; i < 3; i++) {
+        if (zombiesSpawned < waveTotalZombies) {
+          const r = Math.floor(Math.random() * ROWS);
+          zombies.push(new Zombie(Math.random() < 0.5 ? 'conehead' : 'basic', r));
+          zombiesSpawned++;
+        }
+      }
+    }
+
+    function checkVictory() {
+      if (zombiesSpawned >= waveTotalZombies && zombies.length === 0 && !isGameOver && !isVictory) {
+        isVictory = true;
+        currentScore += 500;
+        if (currentScore > gameStorage.highScore) {
+          gameStorage.highScore = currentScore;
+        }
+        if (currentLevel >= gameStorage.unlockedLevel) {
+          gameStorage.unlockedLevel = currentLevel + 1;
+        }
+        saveStorage();
+        sound.playVictory();
+
+        document.getElementById('vicHighScore').textContent = gameStorage.highScore;
+        document.getElementById('victoryModal').classList.remove('hidden');
+      }
+    }
+
+    function triggerGameOver() {
+      if (isGameOver) return;
+      isGameOver = true;
+      sound.playGameOver();
+
+      if (currentScore > gameStorage.highScore) {
+        gameStorage.highScore = currentScore;
+        saveStorage();
+      }
+
+      document.getElementById('overScore').textContent = currentScore;
+      document.getElementById('overKills').textContent = zombiesKilledInLevel;
+      document.getElementById('gameOverModal').classList.remove('hidden');
+    }
+
+    function gameLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
+      lastTimestamp = timestamp;
+
+      if (!isGameOver && !isVictory) {
+        // Natural sun drops
+        naturalSunTimer += dt;
+        if (naturalSunTimer >= 7.5) {
+          naturalSunTimer = 0;
+          spawnSun(80 + Math.random() * (CANVAS_WIDTH - 160), -20, true);
+        }
+
+        // Zombie Spawner
+        spawnTimer += dt;
+        if (spawnTimer >= nextSpawnInterval) {
+          spawnTimer = 0;
+          spawnNextZombie();
+        }
+
+        // Update plants
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (grid[r][c]) {
+              grid[r][c].update(dt);
+            }
+          }
+        }
+
+        // Update Lawnmowers
+        for (let mower of lawnmowers) {
+          mower.update(dt);
+        }
+
+        // Update Projectiles
+        for (let p of projectiles) {
+          p.update(dt);
+        }
+        projectiles = projectiles.filter(p => !p.dead);
+
+        // Update Zombies
+        for (let z of zombies) {
+          z.update(dt);
+        }
+        zombies = zombies.filter(z => z.hp > 0);
+
+        // Update Suns
+        for (let s of suns) {
+          s.update(dt);
+        }
+        suns = suns.filter(s => !s.collected && s.timer < s.lifeTime);
+
+        // Update Particles
+        for (let pt of particles) {
+          pt.x += pt.vx * dt;
+          pt.y += pt.vy * dt;
+          pt.life -= dt;
+        }
+        particles = particles.filter(pt => pt.life > 0);
+
+        // Update Floating Texts
+        for (let ft of floatingTexts) {
+          ft.y += ft.vy * dt;
+          ft.life -= dt;
+        }
+        floatingTexts = floatingTexts.filter(ft => ft.life > 0);
+
+        checkVictory();
+        updateSeedCards();
+        updateDashboard();
+      }
+
+      // RENDER
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      drawLawn();
+
+      // Draw Lawnmowers
+      for (let mower of lawnmowers) {
+        mower.draw();
+      }
+
+      // Draw Plants
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (grid[r][c]) {
+            grid[r][c].draw();
+          }
+        }
+      }
+
+      // Draw Projectiles
+      for (let p of projectiles) {
+        p.draw();
+      }
+
+      // Draw Zombies (Y-sort for natural overlapping)
+      const sortedZombies = [...zombies].sort((a, b) => a.y - b.y);
+      for (let z of sortedZombies) {
+        z.draw();
+      }
+
+      // Draw Suns
+      for (let s of suns) {
+        s.draw();
+      }
+
+      // Draw Particles
+      for (let pt of particles) {
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, Math.max(1, pt.radius * (pt.life / 0.5)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw Floating Texts
+      for (let ft of floatingTexts) {
+        ctx.save();
+        ctx.font = 'bold 18px "Fredoka One", sans-serif';
+        ctx.fillStyle = ft.color;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeText(ft.text, ft.x, ft.y);
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+  </script>
+
+  <script>
+    function updateDashboard() {
+      document.getElementById('uiSun').textContent = currentSun;
+      document.getElementById('uiScore').textContent = currentScore;
+      document.getElementById('uiHighScore').textContent = gameStorage.highScore;
+      document.getElementById('uiLevel').textContent = currentLevel;
+
+      // Zombie progress bar
+      const progress = Math.min(100, Math.floor((zombiesSpawned / waveTotalZombies) * 100));
+      document.getElementById('uiProgressBar').style.width = `${progress}%`;
+      document.getElementById('uiZombiesCount').textContent = `殭屍: ${zombies.length + (waveTotalZombies - zombiesSpawned)}`;
+
+      if (isHugeWaveAlarm) {
+        document.getElementById('uiWaveLabel').textContent = '⚠️ 殭屍大潮來襲！';
+        document.getElementById('uiWaveLabel').className = 'text-red-400 font-extrabold animate-pulse';
+      } else {
+        document.getElementById('uiWaveLabel').textContent = `波次推進 (${progress}%)`;
+        document.getElementById('uiWaveLabel').className = 'text-amber-200 font-bold';
+      }
+    }
+
+    function updateSeedCards() {
+      const now = performance.now() / 1000;
+      document.querySelectorAll('.seed-card').forEach(card => {
+        const type = card.dataset.plant;
+        const cost = parseInt(card.dataset.cost);
+        const cd = cooldowns[type];
+        const remaining = Math.max(0, cd.readyAt - now);
+        const percent = Math.min(100, (remaining / cd.max) * 100);
+
+        const overlay = card.querySelector('.card-cooldown');
+        overlay.style.height = `${percent}%`;
+
+        // Affordability & Selection styling
+        const canAfford = currentSun >= cost;
+        const isReady = remaining <= 0;
+
+        if (!canAfford || !isReady) {
+          card.classList.add('opacity-50');
+        } else {
+          card.classList.remove('opacity-50');
+        }
+
+        if (selectedPlantType === type) {
+          card.classList.add('ring-4', 'ring-yellow-400', 'scale-105');
+        } else {
+          card.classList.remove('ring-4', 'ring-yellow-400', 'scale-105');
+        }
+      });
+
+      // Shovel style
+      const shovelEl = document.getElementById('shovelTool');
+      if (selectedPlantType === 'shovel') {
+        shovelEl.classList.add('ring-4', 'ring-amber-400', 'bg-amber-700');
+      } else {
+        shovelEl.classList.remove('ring-4', 'ring-amber-400', 'bg-amber-700');
+      }
+    }
+
+    function showMessage(msg) {
+      const el = document.getElementById('uiMessage');
+      el.textContent = msg;
+      el.classList.remove('opacity-0');
+      clearTimeout(el.msgTimeout);
+      el.msgTimeout = setTimeout(() => {
+        el.classList.add('opacity-0');
+      }, 2200);
+    }
+
+    // Canvas Coordinate helper
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = CANVAS_WIDTH / rect.width;
+      const scaleY = CANVAS_HEIGHT / rect.height;
+      let clientX, clientY;
+
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
+
+    // Clicking / Tapping Canvas: Collect sun or plant/shovel
+    function handleCanvasInteraction(e) {
+      const coords = getCanvasCoords(e);
+
+      // Check sun click first
+      for (let s of suns) {
+        if (!s.collected) {
+          const dist = Math.hypot(s.x - coords.x, s.y - coords.y);
+          if (dist < s.radius + 15) {
+            s.collected = true;
+            currentSun += 25;
+            sound.playSun();
+            createFloatingText('+25 ☀️', s.x, s.y, '#fef08a');
+            updateDashboard();
+            return;
+          }
+        }
+      }
+
+      const col = Math.floor(coords.x / CELL_W);
+      const row = Math.floor(coords.y / CELL_H);
+
+      if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
+
+      // Shovel action
+      if (selectedPlantType === 'shovel') {
+        if (grid[row][col]) {
+          grid[row][col] = null;
+          sound.playPlant();
+          createFloatingText('已移除 🪴', coords.x, coords.y, '#f87171');
+          selectedPlantType = null;
+          updateSeedCards();
+        } else {
+          showMessage('這裡沒有植物可以剷除！');
+        }
+        return;
+      }
+
+      // Planting action
+      if (selectedPlantType) {
+        const cost = plantCosts[selectedPlantType];
+        const cd = cooldowns[selectedPlantType];
+        const now = performance.now() / 1000;
+
+        if (grid[row][col]) {
+          showMessage('此格已有植物！');
+          return;
+        }
+
+        if (currentSun < cost) {
+          showMessage('陽光不足！');
+          return;
+        }
+
+        if (cd.readyAt > now) {
+          showMessage('卡片冷卻中！');
+          return;
+        }
+
+        // Place Plant
+        grid[row][col] = new Plant(selectedPlantType, col, row);
+        currentSun -= cost;
+        cd.readyAt = now + cd.max;
+        sound.playPlant();
+
+        createFloatingText(`-${cost} ☀️`, coords.x, coords.y, '#cbd5e1');
+
+        selectedPlantType = null;
+        updateDashboard();
+        updateSeedCards();
+      }
+    }
+
+    // Hover Cell preview
+    canvas.addEventListener('mousemove', (e) => {
+      const coords = getCanvasCoords(e);
+      hoverCell.col = Math.floor(coords.x / CELL_W);
+      hoverCell.row = Math.floor(coords.y / CELL_H);
+
+      // Auto collect sun when mouse glides directly over it
+      for (let s of suns) {
+        if (!s.collected && Math.hypot(s.x - coords.x, s.y - coords.y) < s.radius + 10) {
+          s.collected = true;
+          currentSun += 25;
+          sound.playSun();
+          createFloatingText('+25 ☀️', s.x, s.y, '#fef08a');
+          updateDashboard();
+        }
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      hoverCell.col = -1;
+      hoverCell.row = -1;
+    });
+
+    canvas.addEventListener('mousedown', handleCanvasInteraction);
+    canvas.addEventListener('touchstart', (e) => {
+      handleCanvasInteraction(e);
+    }, { passive: true });
+
+    // Cancel selection on canvas right click
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      selectedPlantType = null;
+      updateSeedCards();
+    });
+
+    // Seed Cards click handler
+    document.querySelectorAll('.seed-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sound.init();
+        const type = card.dataset.plant;
+        if (selectedPlantType === type) {
+          selectedPlantType = null;
+        } else {
+          selectedPlantType = type;
+        }
+        updateSeedCards();
+      });
+    });
+
+    // Shovel Button
+    document.getElementById('shovelTool').addEventListener('click', (e) => {
+      e.stopPropagation();
+      sound.init();
+      selectedPlantType = (selectedPlantType === 'shovel') ? null : 'shovel';
+      updateSeedCards();
+    });
+
+    // Keyboard Shortcuts (1-4, S, Space)
+    window.addEventListener('keydown', (e) => {
+      sound.init();
+      if (e.key === '1') selectCardIndex(0);
+      else if (e.key === '2') selectCardIndex(1);
+      else if (e.key === '3') selectCardIndex(2);
+      else if (e.key === '4') selectCardIndex(3);
+      else if (e.key.toLowerCase() === 's') {
+        selectedPlantType = (selectedPlantType === 'shovel') ? null : 'shovel';
+        updateSeedCards();
+      } else if (e.key === 'Escape') {
+        selectedPlantType = null;
+        updateSeedCards();
+      }
+    });
+
+    function selectCardIndex(index) {
+      const cards = document.querySelectorAll('.seed-card');
+      if (cards[index]) {
+        cards[index].click();
+      }
+    }
+
+    // Sound toggle button
+    document.getElementById('btnSound').addEventListener('click', () => {
+      sound.enabled = !sound.enabled;
+      gameStorage.soundEnabled = sound.enabled;
+      saveStorage();
+      document.getElementById('soundIcon').textContent = sound.enabled ? '🔊' : '🔇';
+      showMessage(sound.enabled ? '音效已開啟' : '音效已靜音');
+    });
+
+    // Reset Data Modal / prompt
+    document.getElementById('btnResetData').addEventListener('click', () => {
+      const confirmReset = window.confirm('確定要清空所有歷史紀錄與最高分嗎？');
+      if (confirmReset) {
+        localStorage.removeItem(STORAGE_KEY);
+        gameStorage = {
+          highScore: 0,
+          unlockedLevel: 1,
+          zombiesKilledTotal: 0,
+          soundEnabled: true
+        };
+        saveStorage();
+        updateDashboard();
+        showMessage('已成功重設歷史紀錄！');
+      }
+    });
+
+    // Help Dialog
+    document.getElementById('btnHelp').addEventListener('click', () => {
+      document.getElementById('helpModal').classList.remove('hidden');
+    });
+    document.getElementById('btnCloseHelp').addEventListener('click', () => {
+      document.getElementById('helpModal').classList.add('hidden');
+    });
+    document.getElementById('btnConfirmHelp').addEventListener('click', () => {
+      document.getElementById('helpModal').classList.add('hidden');
+      sound.init();
+    });
+
+    // Restart and Next Level buttons
+    document.getElementById('btnRestart').addEventListener('click', () => {
+      resetLevelState(1);
+    });
+    document.getElementById('btnNextLevel').addEventListener('click', () => {
+      resetLevelState(currentLevel + 1);
+    });
+
+    // Startup Initialization
+    window.addEventListener('load', () => {
+      loadStorage();
+      sound.enabled = gameStorage.soundEnabled;
+      document.getElementById('soundIcon').textContent = sound.enabled ? '🔊' : '🔇';
+      resetLevelState(1);
+      requestAnimationFrame(gameLoop);
+    });
+  </script>
+</body>
+</html>
